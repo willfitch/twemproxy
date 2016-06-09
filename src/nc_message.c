@@ -329,7 +329,7 @@ msg_get_error(bool redis, err_t err)
     struct mbuf *mbuf;
     int n;
     char *errstr = err ? strerror(err) : "unknown";
-    char *protstr = redis ? "-ERR" : "SERVER_ERROR";
+    char *protstr = redis ? "-ERR" : "ERROR";
 
     msg = _msg_get();
     if (msg == NULL) {
@@ -346,7 +346,12 @@ msg_get_error(bool redis, err_t err)
     }
     mbuf_insert(&msg->mhdr, mbuf);
 
-    n = nc_scnprintf(mbuf->last, mbuf_size(mbuf), "%s %s"CRLF, protstr, errstr);
+    if (redis) {
+        n = nc_scnprintf(mbuf->last, mbuf_size(mbuf), "%s %s"CRLF, protstr, errstr);
+    } else {
+        n = nc_scnprintf(mbuf->last, mbuf_size(mbuf), "%s"CRLF, protstr);
+    }
+
     mbuf->last += n;
     msg->mlen = (uint32_t)n;
 
@@ -648,6 +653,12 @@ msg_parse(struct context *ctx, struct conn *conn, struct msg *msg)
 
     case MSG_PARSE_AGAIN:
         status = NC_OK;
+        break;
+
+    case MSG_PARSE_ERROR:
+        status = NC_ERROR;
+        msg->error = 1;
+        conn->recv_done(ctx, conn, msg, NULL);;
         break;
 
     default:
